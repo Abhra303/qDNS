@@ -5,10 +5,12 @@ import (
 	"net"
 )
 
+var DefaultPort int = 53
+
 func PortListener(port int) {
 	if port < 0 || port > 65353 {
 		fmt.Println("the given port is invalid. using the default port 53...")
-		port = 53
+		port = DefaultPort
 	}
 
 	udpAddr := net.UDPAddr{
