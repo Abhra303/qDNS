@@ -7,7 +7,7 @@ import (
 
 var DefaultPort int = 53
 
-func PortListener(port int) {
+func PortListener(port int) *net.UDPConn {
 	if port < 0 || port > 65353 {
 		fmt.Println("the given port is invalid. using the default port 53...")
 		port = DefaultPort
@@ -22,23 +22,5 @@ func PortListener(port int) {
 		panic(err)
 	}
 
-	for {
-		inputBytes := make([]byte, 512)
-
-		length, clientAddr, err := udpConn.ReadFromUDP(inputBytes)
-		if err != nil {
-			fmt.Println("error reading UDP packet")
-		}
-
-		fmt.Printf("clientAddr.Zone: %s\n", clientAddr.Zone)
-		fmt.Printf("clientAddr.Network: %s\n", clientAddr.Network())
-		fmt.Printf("clientAddr.ToString: %s\n", clientAddr.String())
-		fmt.Printf("clientAddr.IP: %s\n", clientAddr.IP.String())
-		fmt.Println("data: ", inputBytes[:length])
-		fmt.Println()
-
-		// go resolveDNSRequest(clientAddr)
-
-	}
-
+	return udpConn
 }
