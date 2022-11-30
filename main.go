@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/abhra303/qDNS/listener"
+	"github.com/abhra303/qDNS/resolver"
 )
 
 func main() {
@@ -38,13 +39,12 @@ func main() {
 			continue
 		}
 
+		go resolver.ResolveDNSRequest(inputBytes, length, clientAddr)
+
 		fmt.Printf("clientAddr.Zone: %s\n", clientAddr.Zone)
 		fmt.Printf("clientAddr.Network: %s\n", clientAddr.Network())
 		fmt.Printf("clientAddr.ToString: %s\n", clientAddr.String())
 		fmt.Printf("clientAddr.IP: %s\n", clientAddr.IP.String())
 		fmt.Println("data: ", inputBytes[:length])
-
-		// go resolveDNSRequest(clientAddr)
-
 	}
 }
