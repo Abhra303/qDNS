@@ -8,9 +8,9 @@ import (
 )
 
 func ResolveDNSRequest(inputBytes []byte, length int, clientAddr *net.UDPAddr) {
-	message, err := dnsparser.ParseDnsMessage(inputBytes, length)
+	message, err := dnsparser.ParseDnsQuery(inputBytes, length)
 	if err != nil {
-		fmt.Print("the given udp packet do not contain a valid dns message\n")
+		fmt.Print(err)
 		return
 	}
 
