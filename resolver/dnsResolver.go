@@ -8,11 +8,11 @@ import (
 )
 
 func ResolveDNSRequest(inputBytes []byte, length int, clientAddr *net.UDPAddr) {
-	message, err := dnsparser.ParseDnsQuery(inputBytes, length)
+	query, err := dnsparser.ParseDnsQuery(inputBytes, length)
 	if err != nil {
 		fmt.Print(err)
 		return
 	}
 
-	fmt.Println(message)
+	fmt.Println(query)
 }

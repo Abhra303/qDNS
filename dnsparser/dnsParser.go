@@ -2,6 +2,8 @@ package dnsparser
 
 import (
 	"fmt"
+
+	"github.com/abhra303/qDNS/zonefiles"
 )
 
 var headerSize int = 96 // message header size
@@ -102,60 +104,29 @@ type MessageQuestion struct {
 	Qclass int
 }
 
-type ResourceRecord struct {
+type DnsQuery struct {
+	Header *MessageHeader
 
 	/*
-	   A domain name to which this resource record pertains
+		One of the below two fields must be nil. Normal
+		queries contain a Question section, but Inverse
+		Queries contain Answer section in dns query and
+		expect dns message responses containing Question
+		section
 	*/
-	Name string
-
-	/*
-	   Two octets containing one of the RR type codes.  This
-	   field specifies the meaning of the data in the RDATA
-	   field.
-	*/
-	Type int
-
-	/*
-	   two octets which specify the class of the data in the
-	   RDATA field.
-	*/
-	Class int
-
-	/*
-	   A 32 bit unsigned integer that specifies the time
-	   interval (in seconds) that the resource record may be
-	   cached before it should be discarded.  Zero values are
-	   interpreted to mean that the RR can only be used for the
-	   transaction in progress, and should not be cached.
-	*/
-	TTL uint
-
-	/*
-	   An unsigned 16 bit integer that specifies the length in
-	   octets of the RDATA field.
-	*/
-	Rdlength uint
-
-	/*
-	   A variable length string of octets that describes the
-	   resource.  The format of this information varies
-	   according to the TYPE and CLASS of the resource record.
-	   For example, the if the TYPE is A and the CLASS is IN,
-	   the RDATA field is a 4 octet ARPA Internet address.
-	*/
-	Rdata string
+	Question *[]*MessageQuestion
+	Answer   []*zonefiles.ResourceRecord
 }
 
 type DnsMessage struct {
 	Header     *MessageHeader
 	Question   *[]*MessageQuestion
-	Answer     []*ResourceRecord
-	Authority  []*ResourceRecord
-	Additional []*ResourceRecord
+	Answer     []*zonefiles.ResourceRecord
+	Authority  []*zonefiles.ResourceRecord
+	Additional []*zonefiles.ResourceRecord
 }
 
-func parseMessageHeader(inputBytes []byte, length int, bytesOffset *int) *MessageHeader {
+func parseQueryHeader(inputBytes []byte, length int, bytesOffset *int) *MessageHeader {
 	header := MessageHeader{}
 
 	if length < headerSize {
@@ -187,7 +158,7 @@ func parseMessageHeader(inputBytes []byte, length int, bytesOffset *int) *Messag
 	return &header
 }
 
-func parseMessageQuestion(inputBytes []byte, bytesOffset *int) *MessageQuestion {
+func parseQueryQuestion(inputBytes []byte, bytesOffset *int) *MessageQuestion {
 	bufLen := len(inputBytes)
 	question := MessageQuestion{}
 	fixedQSize := 2 + 2 // each question size should atleast 4 bytes long (2 byte QType + 2 byte QClass)
@@ -224,12 +195,12 @@ func parseMessageQuestion(inputBytes []byte, bytesOffset *int) *MessageQuestion 
 	return &question
 }
 
-func parseMessageQuestions(inputBytes []byte, qdCount uint, bytesOffset *int) *[]*MessageQuestion {
+func parseQueryQuestions(inputBytes []byte, qdCount uint, bytesOffset *int) *[]*MessageQuestion {
 	var messageQuestions []*MessageQuestion
 	var i uint
 
 	for i = 0; i < qdCount; i++ {
-		messageQuestion := parseMessageQuestion(inputBytes, bytesOffset)
+		messageQuestion := parseQueryQuestion(inputBytes, bytesOffset)
 
 		if messageQuestion == nil {
 			return nil
@@ -239,22 +210,22 @@ func parseMessageQuestions(inputBytes []byte, qdCount uint, bytesOffset *int) *[
 	return &messageQuestions
 }
 
-func ParseDnsQuery(inputBytes []byte, length int) (*DnsMessage, error) {
+func ParseDnsQuery(inputBytes []byte, length int) (*DnsQuery, error) {
 	var err error
 	bytesOffset := 0
-	message := DnsMessage{}
+	query := DnsQuery{}
 
-	message.Header = parseMessageHeader(inputBytes, length, &bytesOffset)
-	if message.Header == nil {
+	query.Header = parseQueryHeader(inputBytes, length, &bytesOffset)
+	if query.Header == nil {
 		err = fmt.Errorf("error parsing dns request header")
-		return &message, err
+		return &query, err
 	}
 
-	message.Question = parseMessageQuestions(inputBytes, message.Header.Qdcount, &bytesOffset)
-	if message.Question == nil {
+	query.Question = parseQueryQuestions(inputBytes, query.Header.Qdcount, &bytesOffset)
+	if query.Question == nil {
 		err = fmt.Errorf("error parsing dns request question section")
-		return &message, err
+		return &query, err
 	}
 
-	return &message, nil
+	return &query, nil
 }
