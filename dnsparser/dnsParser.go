@@ -77,33 +77,6 @@ type MessageHeader struct {
 	Arcount uint // no of RR in the additional records section
 }
 
-type MessageQuestion struct {
-
-	/*
-	   A domain name represented as a sequence of labels, where
-	   each label consists of a length octet followed by that
-	   number of octets.  The domain name terminates with the
-	   zero length octet for the null label of the root.  Note
-	   that this field may be an odd number of octets; no
-	   padding is used.
-	*/
-	QName string
-
-	/*
-	   A two octet code which specifies the type of the query.
-	   The values for this field include all codes valid for a
-	   TYPE field, together with some more general codes which
-	   can match more than one type of RR.
-	*/
-	Qtype int
-
-	/*
-	   A two octet code that specifies the class of the query.
-	   For example, the QCLASS field is IN for the Internet.
-	*/
-	Qclass int
-}
-
 type DnsQuery struct {
 	Header *MessageHeader
 
@@ -114,13 +87,13 @@ type DnsQuery struct {
 		expect dns message responses containing Question
 		section
 	*/
-	Question *[]*MessageQuestion
+	Question *[]*zonefiles.QueryQuestion
 	Answer   []*zonefiles.ResourceRecord
 }
 
 type DnsMessage struct {
 	Header     *MessageHeader
-	Question   *[]*MessageQuestion
+	Question   *[]*zonefiles.QueryQuestion
 	Answer     []*zonefiles.ResourceRecord
 	Authority  []*zonefiles.ResourceRecord
 	Additional []*zonefiles.ResourceRecord
@@ -158,18 +131,18 @@ func parseQueryHeader(inputBytes []byte, length int, bytesOffset *int) *MessageH
 	return &header
 }
 
-func parseQueryQuestion(inputBytes []byte, bytesOffset *int) *MessageQuestion {
+func parseQueryQuestion(inputBytes []byte, bytesOffset *int) *zonefiles.QueryQuestion {
 	bufLen := len(inputBytes)
-	question := MessageQuestion{}
+	question := zonefiles.QueryQuestion{}
 	fixedQSize := 2 + 2 // each question size should atleast 4 bytes long (2 byte QType + 2 byte QClass)
-	qName := ""
 
 	if bufLen-*bytesOffset <= fixedQSize {
 		return nil
 	}
 
 	// though it seems O(n^2) but actually is O(n); n is the no. of bytes in Qname
-	for length := int(inputBytes[*bytesOffset]); length != 0; {
+	for i, length := 0, int(inputBytes[*bytesOffset]); length != 0; i++ {
+		qName := ""
 		if *bytesOffset+length+fixedQSize > bufLen {
 			return nil
 		}
@@ -178,15 +151,14 @@ func parseQueryQuestion(inputBytes []byte, bytesOffset *int) *MessageQuestion {
 			*bytesOffset++
 			qName += string(inputBytes[*bytesOffset])
 		}
+
+		if qName == "" {
+			return nil
+		}
+		question.QName[i] = qName
 		*bytesOffset++
-		qName += "."
 	}
 
-	if qName == "" {
-		return nil
-	}
-
-	question.QName = qName
 	question.Qtype = (int(inputBytes[*bytesOffset]) << 8) ^ int(inputBytes[*bytesOffset+1])
 	*bytesOffset += 2
 	question.Qclass = (int(inputBytes[*bytesOffset]) << 8) ^ int(inputBytes[*bytesOffset+1])
@@ -195,8 +167,8 @@ func parseQueryQuestion(inputBytes []byte, bytesOffset *int) *MessageQuestion {
 	return &question
 }
 
-func parseQueryQuestions(inputBytes []byte, qdCount uint, bytesOffset *int) *[]*MessageQuestion {
-	var messageQuestions []*MessageQuestion
+func parseQueryQuestions(inputBytes []byte, qdCount uint, bytesOffset *int) *[]*zonefiles.QueryQuestion {
+	var messageQuestions []*zonefiles.QueryQuestion
 	var i uint
 
 	for i = 0; i < qdCount; i++ {
