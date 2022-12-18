@@ -33,7 +33,26 @@ func ResolveDNSRequest(inputBytes []byte, length int, clientAddr *net.UDPAddr) {
 	}
 	rrQuery := zonefiles.QueryDomain{QdCount: query.Header.Qdcount, Questions: query.Question}
 
-	resourceRecords, err := zonefiles.SearchResourceRecords(&rrQuery)
+	rrResults, err := zonefiles.SearchResourceRecords(&rrQuery)
+	if err != nil {
+		fmt.Print(err)
+		return
+	}
+
+	response := dnsparser.DnsMessage{}
+	response.Header = query.Header
+	response.Header.Ancount = rrResults.Ancount
+	response.Header.Arcount = rrResults.Arcount
+	response.Header.Nscount = rrResults.Nscount
+	response.Header.Rcode = rrResults.RCode
+	response.Header.Z = 0
+	response.Header.RA = true
+	response.Header.QR = true
+	response.Answer = rrResults.Answers
+	response.Authority = rrResults.Authority
+	response.Additional = rrResults.Additional
+
+	rawMessage, err := dnsparser.SerializeMessage(&response)
 	if err != nil {
 		fmt.Print(err)
 		return
@@ -41,5 +60,6 @@ func ResolveDNSRequest(inputBytes []byte, length int, clientAddr *net.UDPAddr) {
 
 	/* send the response back to the client/resolver */
 	fmt.Println(query)
-	fmt.Println(resourceRecords)
+	fmt.Println(rrResults)
+	fmt.Println(rawMessage)
 }

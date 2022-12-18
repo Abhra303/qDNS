@@ -1,12 +1,14 @@
 package dnsparser
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	"github.com/abhra303/qDNS/zonefiles"
 )
 
-var headerSize int = 96 // message header size
+var headerSize int = 96         // message header size
+var MessageByteLimit uint = 512 // overall message size
 
 type MessageHeader struct {
 
@@ -200,4 +202,112 @@ func ParseDnsQuery(inputBytes []byte, length int) (*DnsQuery, error) {
 	}
 
 	return &query, nil
+}
+
+func serializeMessageHeader(header *MessageHeader, rawMessage []byte, offset *uint) (uint, error) {
+	binary.BigEndian.PutUint16(rawMessage, uint16(header.ID))
+	*offset += 2
+
+	if header.QR {
+		rawMessage[*offset] = 1 << 7
+	}
+
+	rawMessage[*offset] |= (byte(header.Opcode) << 3) & 0b01111000
+	if header.AA {
+		rawMessage[*offset] |= 0x4
+	}
+
+	tcPos := *offset
+	if header.RD {
+		rawMessage[*offset] |= 0x1
+	}
+	*offset++
+	if header.RA {
+		rawMessage[*offset] = 1 << 7
+	}
+	rawMessage[*offset] |= (byte(header.Z) << 4) & 0b01110000
+	rawMessage[*offset] |= byte(header.Rcode) & 0b00001111
+	*offset++
+
+	binary.BigEndian.PutUint16(rawMessage[*offset:], uint16(header.Qdcount))
+	*offset += 2
+	binary.BigEndian.PutUint16(rawMessage[*offset:], uint16(header.Ancount))
+	*offset += 2
+	binary.BigEndian.PutUint16(rawMessage[*offset:], uint16(header.Nscount))
+	*offset += 2
+	binary.BigEndian.PutUint16(rawMessage[*offset:], uint16(header.Arcount))
+
+	return tcPos, nil
+}
+
+func serializeMessageQuestion(questions *[]*zonefiles.QueryQuestion, rawMessage []byte, offset *uint) (bool, error) {
+	for _, question := range *questions {
+		labels := question.QName
+		for _, label := range labels {
+			len := len(label)
+
+			rawMessage[*offset] = byte(len)
+			*offset++
+			if *offset+3 >= MessageByteLimit {
+				return true, nil
+			}
+
+			for i := range label {
+				rawMessage[*offset] = byte(label[i])
+				*offset++
+			}
+		}
+		// a null byte to denote the end of query domain
+		*offset++
+
+		binary.BigEndian.PutUint16(rawMessage[*offset:], uint16(question.Qtype))
+		*offset += 2
+
+		binary.BigEndian.PutUint16(rawMessage[*offset:], uint16(question.Qclass))
+		*offset += 2
+	}
+	return (*offset >= MessageByteLimit), nil
+}
+
+func serializeResourceRecords(RRs []*zonefiles.ResourceRecord, rawMessage []byte, offset *uint) (bool, error) {
+	return false, nil
+}
+
+func SerializeMessage(message *DnsMessage) ([]byte, error) {
+	var offset uint
+	var tcPos uint
+	var isTruncated bool
+	rawMessage := make([]byte, 512)
+
+	tcPos, err := serializeMessageHeader(message.Header, rawMessage, &offset)
+	if err != nil {
+		return nil, err
+	}
+
+	isTruncated, err = serializeMessageQuestion(message.Question, rawMessage, &offset)
+	if err != nil {
+		return nil, err
+	} else if isTruncated {
+		goto truncated
+	}
+
+	isTruncated, err = serializeResourceRecords(message.Answer, rawMessage, &offset)
+	if err != nil {
+		return nil, err
+	} else if isTruncated {
+		goto truncated
+	}
+
+	isTruncated, err = serializeResourceRecords(message.Answer, rawMessage, &offset)
+	if err != nil {
+		return nil, err
+	} else if isTruncated {
+		goto truncated
+	}
+
+	return rawMessage, err
+
+truncated:
+	rawMessage[tcPos] &= ^byte(0x2)
+	return rawMessage, err
 }
