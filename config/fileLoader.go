@@ -12,6 +12,11 @@ var ServerConfiguration ConfigFile
 
 type ConfigFile struct {
 	// TODO: design config file fields
+	Zones []struct {
+		ZoneName         string
+		ZonefileLocation []string
+	}
+	// Some configurations
 }
 
 func fileExists(filePath string) (bool, error) {
