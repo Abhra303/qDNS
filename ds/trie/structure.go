@@ -1,80 +1,120 @@
 package trie
 
-import "fmt"
+import (
+	"fmt"
+)
 
-type trieNode struct {
-	Bit             byte
-	AvaliableBitmap [16]byte
-	Data            interface{}
-	Children        []*trieNode
+type TrieContext struct {
+	KeyLimit uint16
+}
+
+type Trie interface {
+	Put(key string, data interface{}) error
+	Update(key string, data interface{}) error
+	Delete(key string) (interface{}, error)
+	Search(key string) (interface{}, error)
+	IsEmpty() bool
 }
 
 type trie struct {
-	Root  *trieNode
-	Flags int
+	root   *trieNode
+	config trieConfig
 }
 
-func (tn *trieNode) append(char byte, data interface{}) (bool, error) {
-	if char == 0 || data == nil {
-		return false, fmt.Errorf("either the character or the data is empty")
-	}
-	charVal := int(char)
-	if charVal > 128 {
-		return false, fmt.Errorf("invalid character for name server")
-	}
-
-	if tn.exists(charVal) {
-		return false, fmt.Errorf("can't append - charecter already exists")
-	}
-
-	tn.Children = append(tn.Children, &trieNode{Bit: char, Data: data})
-	tn.setBitmap(charVal)
-
-	return true, nil
+func (t *trie) IsExceedingKeyLimit(key string) bool {
+	return t.config.isExceedingKeyLimit(key)
 }
 
-func (tn *trieNode) exists(charVal int) bool {
-	bytePos := charVal / 8
+func (t *trie) Put(key string, data interface{}) error {
+	var err error
+	if t.IsExceedingKeyLimit(key) {
+		return fmt.Errorf("error: the given key exceeds the key length limit")
+	}
 
-	if bytePos < len(tn.AvaliableBitmap) {
-		var maskByte byte = 1 << (charVal % 8)
-
-		resultBit := tn.AvaliableBitmap[bytePos] & maskByte
-		if resultBit == maskByte {
-			return true
+	var node *trieNode = t.root
+	var exist bool
+	for i, char := range key {
+		charByte := byte(char)
+		if i == len(key)-1 {
+			node, _, exist = iterateNode(node, charByte)
+			if exist {
+				node.put(data)
+			} else {
+				err = node.append(charByte, data)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		node, _, exist = iterateNode(node, charByte)
+		if !exist {
+			err = node.append(charByte, nil)
+			if err != nil {
+				return err
+			}
+			node, _, _ = iterateNode(node, charByte)
 		}
 	}
-	return false
+	return nil
 }
 
-func (tn *trieNode) setBitmap(charVal int) bool {
-	bytePos := charVal / 8
-
-	if bytePos < len(tn.AvaliableBitmap) {
-		var maskByte byte = 1 << (charVal % 8)
-
-		tn.AvaliableBitmap[bytePos] = tn.AvaliableBitmap[bytePos] | maskByte
-		return true
+func (t *trie) Update(key string, data interface{}) error {
+	tn, err := t.search(key)
+	if err != nil {
+		return err
 	}
-	return false
+	tn.put(data)
+	return nil
 }
 
-func (t *trie) Insert(prefix string, data interface{}) (bool, error) {
-	return true, nil
+func (t *trie) Delete(key string) (interface{}, error) {
+	var node *trieNode = t.root
+	var ci int = -1
+	var exist bool
+	for i, char := range key {
+		charByte := byte(char)
+		prevNode := node
+		node, ci, exist = iterateNode(node, charByte)
+		if !exist {
+			return nil, fmt.Errorf("the given key doesn't exist")
+		}
+
+		if i == len(key)-1 {
+			copy(prevNode.children[ci:], prevNode.children[ci+1:])
+			prevNode.children[len(prevNode.children)-1] = nil // or the zero value of T
+			prevNode.children = prevNode.children[:len(prevNode.children)-1]
+		}
+	}
+	return node.data, nil
 }
 
-func (t *trie) Update(prefix string, data interface{}) (bool, error) {
-	return true, nil
+func (t *trie) Search(key string) (interface{}, error) {
+	tn, err := t.search(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return tn.data, nil
 }
 
-func (t *trie) Delete(prefix string) (bool, error) {
-	return true, nil
+func (t *trie) IsEmpty() bool {
+	return t.root.children == nil
 }
 
-func (t *trie) Search(prefix string) (interface{}, error) {
-	return nil, nil
+func (t *trie) search(key string) (*trieNode, error) {
+	var node *trieNode = t.root
+	var exist bool
+	for _, char := range key {
+		charByte := byte(char)
+		node, _, exist = iterateNode(node, charByte)
+		if !exist {
+			return nil, fmt.Errorf("the given key doesn't exist")
+		}
+	}
+	return node, nil
 }
 
-func NewTrie() *trie {
-	return &trie{Root: &trieNode{}}
+func NewTrie(context *TrieContext) Trie {
+	config := CreateNewTrieConfig(context)
+	return &trie{root: &trieNode{}, config: config}
 }
