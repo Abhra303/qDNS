@@ -12,7 +12,7 @@ type QueryQuestion struct {
 	   that this field may be an odd number of octets; no
 	   padding is used.
 	*/
-	QName []string
+	QName string
 
 	/*
 	   A two octet code which specifies the type of the query.
@@ -66,5 +66,6 @@ func SearchResourceRecords(query *QueryDomain) (*QueryResult, error) {
 		return SearchResourceRecord((*query.Questions)[0])
 	}
 
+	// TODO: handle multiple questions efficiently
 	return &QueryResult{}, nil
 }

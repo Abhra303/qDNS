@@ -3,6 +3,7 @@ package dnsparser
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 
 	"github.com/abhra303/qDNS/zonefiles"
 )
@@ -133,20 +134,20 @@ func parseQueryHeader(inputBytes []byte, length int, bytesOffset *int) *MessageH
 	return &header
 }
 
-func parseQueryQuestion(inputBytes []byte, bytesOffset *int) *zonefiles.QueryQuestion {
+func parseQueryQuestion(inputBytes []byte, bytesOffset *int) (*zonefiles.QueryQuestion, error) {
 	bufLen := len(inputBytes)
 	question := zonefiles.QueryQuestion{}
-	fixedQSize := 2 + 2 // each question size should atleast 4 bytes long (2 byte QType + 2 byte QClass)
+	fixedQSize := 2 + 2 // each question size should be atleast 4 bytes long (2 byte QType + 2 byte QClass)
 
 	if bufLen-*bytesOffset <= fixedQSize {
-		return nil
+		return nil, fmt.Errorf("corrupt question: question size to small")
 	}
 
-	// though it seems O(n^2) but actually is O(n); n is the no. of bytes in Qname
+	// though it seems O(n^2) but actually it is O(n); n is the no. of bytes in Qname
 	for i, length := 0, int(inputBytes[*bytesOffset]); length != 0; i++ {
 		qName := ""
 		if *bytesOffset+length+fixedQSize > bufLen {
-			return nil
+			return nil, fmt.Errorf("corrupt question: question size too small")
 		}
 
 		for ; length > 0; length-- {
@@ -155,9 +156,9 @@ func parseQueryQuestion(inputBytes []byte, bytesOffset *int) *zonefiles.QueryQue
 		}
 
 		if qName == "" {
-			return nil
+			return nil, fmt.Errorf("corrupt question: question is empty")
 		}
-		question.QName[i] = qName
+		question.QName += qName + "."
 		*bytesOffset++
 	}
 
@@ -166,22 +167,21 @@ func parseQueryQuestion(inputBytes []byte, bytesOffset *int) *zonefiles.QueryQue
 	question.Qclass = (int(inputBytes[*bytesOffset]) << 8) ^ int(inputBytes[*bytesOffset+1])
 	*bytesOffset += 2
 
-	return &question
+	return &question, nil
 }
 
-func parseQueryQuestions(inputBytes []byte, qdCount uint, bytesOffset *int) *[]*zonefiles.QueryQuestion {
+func parseQueryQuestions(inputBytes []byte, qdCount uint, bytesOffset *int) (*[]*zonefiles.QueryQuestion, error) {
 	var messageQuestions []*zonefiles.QueryQuestion
 	var i uint
 
 	for i = 0; i < qdCount; i++ {
-		messageQuestion := parseQueryQuestion(inputBytes, bytesOffset)
-
-		if messageQuestion == nil {
-			return nil
+		messageQuestion, err := parseQueryQuestion(inputBytes, bytesOffset)
+		if err != nil {
+			return nil, err
 		}
 		messageQuestions = append(messageQuestions, messageQuestion)
 	}
-	return &messageQuestions
+	return &messageQuestions, nil
 }
 
 func ParseDnsQuery(inputBytes []byte, length int) (*DnsQuery, error) {
@@ -192,13 +192,17 @@ func ParseDnsQuery(inputBytes []byte, length int) (*DnsQuery, error) {
 	query.Header = parseQueryHeader(inputBytes, length, &bytesOffset)
 	if query.Header == nil {
 		err = fmt.Errorf("error parsing dns request header")
-		return &query, err
+		return nil, err
 	}
 
-	query.Question = parseQueryQuestions(inputBytes, query.Header.Qdcount, &bytesOffset)
+	query.Question, err = parseQueryQuestions(inputBytes, query.Header.Qdcount, &bytesOffset)
+	if err != nil {
+		return nil, err
+	}
+
 	if query.Question == nil {
 		err = fmt.Errorf("error parsing dns request question section")
-		return &query, err
+		return nil, err
 	}
 
 	return &query, nil
@@ -242,7 +246,7 @@ func serializeMessageHeader(header *MessageHeader, rawMessage []byte, offset *ui
 
 func serializeMessageQuestion(questions *[]*zonefiles.QueryQuestion, rawMessage []byte, offset *uint) (bool, error) {
 	for _, question := range *questions {
-		labels := question.QName
+		labels := strings.Split(question.QName, ".")
 		for _, label := range labels {
 			len := len(label)
 
