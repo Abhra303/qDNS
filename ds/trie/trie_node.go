@@ -5,12 +5,12 @@ import "fmt"
 type trieNode struct {
 	bit             byte
 	avaliableBitmap [16]byte // bitmap of 128 chars
-	data            interface{}
+	data            []interface{}
 	children        []*trieNode
 }
 
 func (tn *trieNode) put(data interface{}) {
-	tn.data = data
+	tn.data = append(tn.data, data)
 }
 
 func (tn *trieNode) append(char byte, data interface{}) error {
@@ -26,11 +26,14 @@ func (tn *trieNode) append(char byte, data interface{}) error {
 		return fmt.Errorf("can't append - charecter already exists")
 	}
 
-	tn.children = append(tn.children, &trieNode{bit: char, data: data})
 	err := tn.setBitmap(charVal)
 	if err != nil {
 		return err
 	}
+
+	node := &trieNode{bit: char}
+	node.data = append(node.data, data)
+	tn.children = append(tn.children, node)
 
 	return nil
 }

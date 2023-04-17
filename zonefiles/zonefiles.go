@@ -3,11 +3,13 @@ package zonefiles
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/abhra303/qDNS/config"
 	"github.com/abhra303/qDNS/ds/trie"
@@ -295,6 +297,7 @@ func (zp *zonefileParser) parseZoneDirectives(line string) error {
 		rawValue := strings.Split(data[1], ";")
 		value := strings.TrimSpace(rawValue[0])
 		data[0] = strings.TrimLeft(data[0], "$")
+		data[0] = strings.TrimSpace(data[0])
 		switch data[0] {
 		case "ORGIN":
 			if CheckDomainValidity(value) {
@@ -307,7 +310,7 @@ func (zp *zonefileParser) parseZoneDirectives(line string) error {
 		case "TTL":
 			i, err := strconv.Atoi(value)
 			if err != nil {
-				return nil
+				return err
 			}
 			zp.zone.TTL = i
 		default:
@@ -323,34 +326,38 @@ func (zp *zonefileParser) parseMetadataFromLine(fields []string, resoresourceRec
 	fieldNumbers := len(fields)
 	var class RClass = IN
 
-	// for i := 0; i < fieldNumbers-1 && checkTypeValidity(fields[i]) == UnknownType; i++ {
-	// 	switch fields[i] {
-	// 	case "@":
-	// 		zp.currentDomain = zp.zone.Origin
-	// 	case
-	// 	}
-	// }
-
 	if fieldNumbers == 2 {
 		if zp.currentDomain == "" {
 			return fmt.Errorf("invalid file: missing domain name")
 		}
 	} else if fieldNumbers == 3 {
 		if fields[0] == "@" {
-			zp.currentDomain = zp.zone.Origin
-		} else if CheckDomainValidity(fields[0]) {
-			zp.currentDomain = fields[0]
+			zp.currentDomain = ""
 		} else if class = CheckClassValidity(fields[0]); class != UnknownClass {
+			if zp.currentDomain == "" {
+				return fmt.Errorf("invalid file: missing domain name")
+			}
 		} else {
-			return fmt.Errorf("invalid file: unknown first field")
+			currentDomain := fields[0]
+			if strings.HasSuffix(fields[0], zp.zone.Origin) {
+				currentDomain = strings.TrimSuffix(fields[0], zp.zone.Origin)
+			} else if strings.HasSuffix(fields[0], ".") {
+				return fmt.Errorf("parse error: can't have a non zone domain %s in zone %s", fields[0], zp.zone.Origin)
+			}
+			zp.currentDomain = currentDomain
 		}
 	} else if fieldNumbers == 4 {
 		if fields[0] == "@" {
-			zp.currentDomain = zp.zone.Origin
-		} else if !CheckDomainValidity(fields[0]) {
-			return fmt.Errorf("invalid file: the domain name is not valid")
+			zp.currentDomain = ""
+		} else {
+			currentDomain := fields[0]
+			if strings.HasSuffix(fields[0], zp.zone.Origin) {
+				currentDomain = strings.TrimSuffix(fields[0], zp.zone.Origin)
+			} else if strings.HasSuffix(fields[0], ".") {
+				return fmt.Errorf("parse error: can't have a non zone domain %s in zone %s", fields[0], zp.zone.Origin)
+			}
+			zp.currentDomain = currentDomain
 		}
-		zp.currentDomain = fields[0]
 		class = CheckClassValidity(fields[1])
 		if class == UnknownClass {
 			return fmt.Errorf("invalid file: unknown class field")
@@ -433,23 +440,35 @@ func (zp *zonefileParser) parseMxFromFile(fields []string) error {
 		}
 	} else if fieldNumbers == 3 {
 		if fields[0] == "@" {
-			zp.currentDomain = zp.zone.Origin
-		} else if CheckDomainValidity(fields[0]) {
-			zp.currentDomain = fields[0]
+			zp.currentDomain = ""
 		} else if class = CheckClassValidity(fields[0]); class != UnknownClass {
+			if zp.currentDomain == "" {
+				return fmt.Errorf("invalid file: missing domain name")
+			}
 		} else if i, err := strconv.Atoi(fields[1]); err == nil {
 			preference = i
 		} else {
-			return fmt.Errorf("invalid file: the mx record is invalid")
+			currentDomain := fields[0]
+			if strings.HasSuffix(fields[0], zp.zone.Origin) {
+				currentDomain = strings.TrimSuffix(fields[0], zp.zone.Origin)
+			} else if strings.HasSuffix(fields[0], ".") {
+				return fmt.Errorf("parse error: can't have a non zone domain %s in zone %s", fields[0], zp.zone.Origin)
+			}
+			zp.currentDomain = currentDomain
 		}
 	} else if fieldNumbers == 4 {
 		if i, err := strconv.Atoi(fields[2]); err != nil {
 			if fields[0] == "@" {
-				zp.currentDomain = zp.zone.Origin
-			} else if !CheckDomainValidity(fields[0]) {
-				return fmt.Errorf("invalid file: the domain name is not valid")
+				zp.currentDomain = ""
+			} else {
+				currentDomain := fields[0]
+				if strings.HasSuffix(fields[0], zp.zone.Origin) {
+					currentDomain = strings.TrimSuffix(fields[0], zp.zone.Origin)
+				} else if strings.HasSuffix(fields[0], ".") {
+					return fmt.Errorf("parse error: can't have a non zone domain %s in zone %s", fields[0], zp.zone.Origin)
+				}
+				zp.currentDomain = currentDomain
 			}
-			zp.currentDomain = fields[0]
 			class := CheckClassValidity(fields[1])
 			if class == UnknownClass {
 				return fmt.Errorf("invalid file: unknown class field")
@@ -457,21 +476,33 @@ func (zp *zonefileParser) parseMxFromFile(fields []string) error {
 		} else {
 			preference = i
 			if fields[0] == "@" {
-				zp.currentDomain = zp.zone.Origin
-			} else if CheckDomainValidity(fields[0]) {
-				zp.currentDomain = fields[0]
+				zp.currentDomain = ""
 			} else if class = CheckClassValidity(fields[0]); class != UnknownClass {
+				if zp.currentDomain == "" {
+					return fmt.Errorf("invalid file: missing domain name")
+				}
 			} else {
-				return fmt.Errorf("invalid file: the mx record is invalid")
+				currentDomain := fields[0]
+				if strings.HasSuffix(fields[0], zp.zone.Origin) {
+					currentDomain = strings.TrimSuffix(fields[0], zp.zone.Origin)
+				} else if strings.HasSuffix(fields[0], ".") {
+					return fmt.Errorf("parse error: can't have a non zone domain %s in zone %s", fields[0], zp.zone.Origin)
+				}
+				zp.currentDomain = currentDomain
 			}
 		}
 	} else if fieldNumbers == 5 {
 		if fields[0] == "@" {
-			zp.currentDomain = zp.zone.Origin
-		} else if !CheckDomainValidity(fields[0]) {
-			return fmt.Errorf("invalid file: the domain name is not valid")
+			zp.currentDomain = ""
+		} else {
+			currentDomain := fields[0]
+			if strings.HasSuffix(fields[0], zp.zone.Origin) {
+				currentDomain = strings.TrimSuffix(fields[0], zp.zone.Origin)
+			} else if strings.HasSuffix(fields[0], ".") {
+				return fmt.Errorf("parse error: can't have a non zone domain %s in zone %s", fields[0], zp.zone.Origin)
+			}
+			zp.currentDomain = currentDomain
 		}
-		zp.currentDomain = fields[0]
 		class = CheckClassValidity(fields[1])
 		if class == UnknownClass {
 			return fmt.Errorf("invalid file: unknown class field")
@@ -551,6 +582,7 @@ func (zp *zonefileParser) parseFile() error {
 	var err error
 	fscanner := zp.fscanner
 
+	//TODO: this approach can be improved
 	for fscanner.Scan() {
 		line := fscanner.Text()
 
@@ -603,58 +635,71 @@ func (zp *zonefileParser) parseFile() error {
 	return nil
 }
 
-func (z *Zone) findResourceRecord(query *QueryQuestion) QueryResult {
+func (z *Zone) findResourceRecord(query *QueryQuestion) (*QueryResult, error) {
 	// code to search for resource record
-	return QueryResult{}
+	return nil, nil
 }
 
-func (z *Zone) loadFromFiles(files []string) error {
+func (z *Zone) loadFromFiles(files []string) {
+	wg := new(sync.WaitGroup)
+	wg.Add(len(files))
 	for _, file := range files {
-		f, err := os.Open(file)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
+		go (func(file string) {
+			defer wg.Done()
+			f, err := os.Open(file)
+			if err != nil {
+				log.Printf("%s: %v\n", file, err)
+				return
+			}
+			defer f.Close()
 
-		fscanner := bufio.NewScanner(f)
-		zfParser := zonefileParser{zone: z, fscanner: fscanner}
+			fscanner := bufio.NewScanner(f)
+			zfParser := zonefileParser{zone: z, fscanner: fscanner}
 
-		err = zfParser.parseFile()
-		if err != nil {
-			return err
-		}
+			err = zfParser.parseFile()
+			if err != nil {
+				log.Printf("%s: parse error: %v\n", file, err)
+				return
+			}
+		})(file)
 	}
-	return nil
+	wg.Wait()
 }
 
 func loadZones() bool {
+	wg := new(sync.WaitGroup)
+	wg.Add(len(config.ServerConfiguration.Zones))
 	for _, zoneConf := range config.ServerConfiguration.Zones {
-		var zone *Zone
-		fmt.Printf("%v\n", zoneConf)
-		zone.trie = trie.NewTrie(&trie.TrieContext{})
-		zone.ZoneName = zoneConf.ZoneName
-		err := zone.loadFromFiles(zoneConf.ZonefileLocation)
-		if err != nil {
-			fmt.Println(fmt.Errorf("error loading zones: %v", err))
-			return false
-		}
-		Catalog.Put(zone.ZoneName, zone)
+		go (func(zoneName string, zoneFileLocation []string) {
+			var zone *Zone
+			defer wg.Done()
+			log.Printf("%v\n", zoneName)
+			zone.trie = trie.NewTrie(&trie.TrieContext{})
+			zone.ZoneName = zoneName
+			zone.loadFromFiles(zoneFileLocation)
+			if zone.IsEmpty() {
+				log.Println(fmt.Errorf("zone loading failed: either zone %s has empty files or files have parse errors", zone.ZoneName))
+				return
+			}
+			Catalog.Put(zone.ZoneName, zone)
+		})(zoneConf.ZoneName, zoneConf.ZonefileLocation)
 	}
-	return true
+	wg.Wait()
+	return !Catalog.IsEmpty()
 }
 
-func findZone(question *QueryQuestion) (*Zone, bool) {
+func findZone(question *QueryQuestion) (*Zone, error) {
 	if Catalog.IsEmpty() && !loadZones() {
-		return nil, false
+		return nil, fmt.Errorf("failed to load zones")
 	}
 
 	// TODO: fix the searching of available zones
-	zone, err := Catalog.Search(question.QName)
+	z, err := Catalog.Search(question.QName)
 	if err != nil {
 		fmt.Println(err)
-		return nil, false
+		return nil, err
 	}
+	zone := z[0]
 
-	fmt.Println("zone for the query domain not found")
-	return zone.(*Zone), true
+	return zone.(*Zone), nil
 }

@@ -12,7 +12,7 @@ type Trie interface {
 	Put(key string, data interface{}) error
 	Update(key string, data interface{}) error
 	Delete(key string) (interface{}, error)
-	Search(key string) (interface{}, error)
+	Search(key string) ([]interface{}, error)
 	IsEmpty() bool
 }
 
@@ -27,6 +27,10 @@ func (t *trie) IsExceedingKeyLimit(key string) bool {
 
 func (t *trie) Put(key string, data interface{}) error {
 	var err error
+	if key == "" {
+		t.root.put(data)
+		return nil
+	}
 	if t.IsExceedingKeyLimit(key) {
 		return fmt.Errorf("error: the given key exceeds the key length limit")
 	}
@@ -45,6 +49,7 @@ func (t *trie) Put(key string, data interface{}) error {
 					return err
 				}
 			}
+			return nil
 		}
 		node, _, exist = iterateNode(node, charByte)
 		if !exist {
@@ -88,7 +93,7 @@ func (t *trie) Delete(key string) (interface{}, error) {
 	return node.data, nil
 }
 
-func (t *trie) Search(key string) (interface{}, error) {
+func (t *trie) Search(key string) ([]interface{}, error) {
 	tn, err := t.search(key)
 	if err != nil {
 		return nil, err
@@ -103,6 +108,9 @@ func (t *trie) IsEmpty() bool {
 
 func (t *trie) search(key string) (*trieNode, error) {
 	var node *trieNode = t.root
+	if key == "" {
+		return node, nil
+	}
 	var exist bool
 	for _, char := range key {
 		charByte := byte(char)

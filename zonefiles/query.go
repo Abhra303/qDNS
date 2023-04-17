@@ -1,7 +1,5 @@
 package zonefiles
 
-import "fmt"
-
 type QueryQuestion struct {
 
 	/*
@@ -36,7 +34,7 @@ TODO: We should stop storing Questions as pointer
 */
 type QueryDomain struct {
 	QdCount   uint
-	Questions *[]*QueryQuestion
+	Questions []*QueryQuestion
 }
 
 type QueryResult struct {
@@ -50,20 +48,20 @@ type QueryResult struct {
 }
 
 func SearchResourceRecord(query *QueryQuestion) (*QueryResult, error) {
-	var queryResult QueryResult
-	zone, isPresent := findZone(query)
-	if !isPresent {
-		return nil, fmt.Errorf("zone not found")
+	zone, err := findZone(query)
+	if err != nil {
+		return nil, err
 	}
-	if zone != nil {
-		queryResult = zone.findResourceRecord(query)
+	queryResult, err := zone.findResourceRecord(query)
+	if err != nil {
+		return nil, err
 	}
-	return &queryResult, nil
+	return queryResult, nil
 }
 
 func SearchResourceRecords(query *QueryDomain) (*QueryResult, error) {
 	if query.QdCount == 1 {
-		return SearchResourceRecord((*query.Questions)[0])
+		return SearchResourceRecord(query.Questions[0])
 	}
 
 	// TODO: handle multiple questions efficiently

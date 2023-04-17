@@ -90,7 +90,7 @@ type DnsQuery struct {
 		expect dns message responses containing Question
 		section
 	*/
-	Question *[]*zonefiles.QueryQuestion
+	Question []*zonefiles.QueryQuestion
 	Answer   []*zonefiles.ResourceRecord
 }
 
@@ -170,7 +170,7 @@ func parseQueryQuestion(inputBytes []byte, bytesOffset *int) (*zonefiles.QueryQu
 	return &question, nil
 }
 
-func parseQueryQuestions(inputBytes []byte, qdCount uint, bytesOffset *int) (*[]*zonefiles.QueryQuestion, error) {
+func parseQueryQuestions(inputBytes []byte, qdCount uint, bytesOffset *int) ([]*zonefiles.QueryQuestion, error) {
 	var messageQuestions []*zonefiles.QueryQuestion
 	var i uint
 
@@ -181,7 +181,7 @@ func parseQueryQuestions(inputBytes []byte, qdCount uint, bytesOffset *int) (*[]
 		}
 		messageQuestions = append(messageQuestions, messageQuestion)
 	}
-	return &messageQuestions, nil
+	return messageQuestions, nil
 }
 
 func ParseDnsQuery(inputBytes []byte, length int) (*DnsQuery, error) {
