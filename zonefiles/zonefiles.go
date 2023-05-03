@@ -369,6 +369,73 @@ func (zp *zonefileParser) parseMetadataFromLine(fields []string, resoresourceRec
 }
 
 func (zp *zonefileParser) parseSoaFromFile(fields []string) error {
+	if len(fields) < 5 {
+		return fmt.Errorf("invalid file: soa have fewer fields")
+	}
+	if fields[0] == "@" {
+		zp.currentDomain = zp.zone.Origin
+	} else if !CheckDomainValidity(fields[0]) {
+		return fmt.Errorf("invalid file: soa has invalid domain name")
+	} else {
+		zp.currentDomain = fields[0]
+	}
+	class := CheckClassValidity(fields[1])
+	if class == UnknownClass {
+		return fmt.Errorf("invalid file: unknown class field in soa")
+	}
+	zp.zone.SOA.Class = class
+
+	if !CheckDomainValidity(fields[3]) {
+		return fmt.Errorf("invalid file: the soa domain is not correct")
+	}
+	zp.zone.SOA.MName = fields[3]
+	if !CheckDomainValidity(fields[4]) {
+		return fmt.Errorf("invalid file: the soa mail is not correct")
+	}
+	zp.zone.SOA.RName = fields[4]
+	if fields[5] == "(" {
+		var valOpts []int
+		for zp.fscanner.Scan() {
+			if len(valOpts) > 5 {
+				return fmt.Errorf("invalid file: unkwnown arguments in soa")
+			}
+			line := zp.fscanner.Text()
+			line = strings.TrimLeft(line, ";")
+			line = strings.TrimSpace(line)
+			if strings.HasSuffix(line, ")") {
+				if line == ")" {
+					break
+				}
+				line = strings.TrimSuffix(line, ")")
+				i, err := strconv.Atoi(line)
+				if err != nil {
+					return err
+				}
+				valOpts = append(valOpts, i)
+				break
+			}
+			i, err := strconv.Atoi(line)
+			if err != nil {
+				return err
+			}
+			valOpts = append(valOpts, i)
+		}
+		if len(valOpts) >= 1 {
+			zp.zone.SOA.Serial = valOpts[0]
+		}
+		if len(valOpts) >= 2 {
+			zp.zone.SOA.Refresh = valOpts[1]
+		}
+		if len(valOpts) >= 3 {
+			zp.zone.SOA.Retry = valOpts[2]
+		}
+		if len(valOpts) >= 4 {
+			zp.zone.SOA.Expire = valOpts[3]
+		}
+		if len(valOpts) >= 5 {
+			zp.zone.SOA.Minimum = valOpts[4]
+		}
+	}
 	return nil
 }
 
