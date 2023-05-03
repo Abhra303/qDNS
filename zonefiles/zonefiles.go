@@ -241,7 +241,7 @@ func (z *Zone) Delete(key string) (interface{}, error) {
 	return nil, nil
 }
 
-func (z *Zone) Search(key string) (interface{}, error) {
+func (z *Zone) Search(key string) ([]interface{}, error) {
 	if !strings.HasSuffix(key, z.Origin) {
 		return nil, fmt.Errorf("key doesn't match with the zone origin prefix")
 	}
@@ -709,7 +709,24 @@ func (zp *zonefileParser) parseFile() error {
 
 func (z *Zone) findResourceRecord(query *QueryQuestion) (*QueryResult, error) {
 	// code to search for resource record
-	return nil, nil
+	rData, err := z.Search(query.QName)
+	if err != nil {
+		return nil, err
+	}
+	result := &QueryResult{}
+
+	for _, data := range rData {
+		tData := data.(ResourceRecord)
+		if tData.GetRType() == RType(query.Qtype) && tData.GetRClass() == RClass(query.Qclass) {
+			result.Answers = append(result.Answers, &tData)
+			result.Ancount++
+		} else {
+			result.Nscount++
+			result.Authority = append(result.Authority, &tData)
+		}
+
+	}
+	return result, nil
 }
 
 func (z *Zone) loadFromFiles(files []string) {
@@ -738,7 +755,7 @@ func (z *Zone) loadFromFiles(files []string) {
 	wg.Wait()
 }
 
-func loadZones() bool {
+func LoadZones() bool {
 	wg := new(sync.WaitGroup)
 	wg.Add(len(config.ServerConfiguration.Zones))
 	for _, zoneConf := range config.ServerConfiguration.Zones {
@@ -761,7 +778,7 @@ func loadZones() bool {
 }
 
 func findZone(question *QueryQuestion) (*Zone, error) {
-	if Catalog.IsEmpty() && !loadZones() {
+	if Catalog.IsEmpty() {
 		return nil, fmt.Errorf("failed to load zones")
 	}
 

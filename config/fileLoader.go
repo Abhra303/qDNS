@@ -13,9 +13,9 @@ var ServerConfiguration ConfigFile
 type ConfigFile struct {
 	// TODO: design config file fields
 	Zones []struct {
-		ZoneName         string
-		ZonefileLocation []string
-	}
+		ZoneName         string   `yaml:"name"`
+		ZonefileLocation []string `yaml:"filePath"`
+	} `yaml:"zones"`
 	// Some configurations
 }
 

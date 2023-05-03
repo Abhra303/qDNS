@@ -103,7 +103,10 @@ func (t *trie) Search(key string) ([]interface{}, error) {
 }
 
 func (t *trie) IsEmpty() bool {
-	return t.root.children == nil
+	if len(t.root.data) == 0 && t.root.children == nil {
+		return true
+	}
+	return false
 }
 
 func (t *trie) search(key string) (*trieNode, error) {

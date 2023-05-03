@@ -8,7 +8,7 @@ import (
 	"github.com/abhra303/qDNS/zonefiles"
 )
 
-func ResolveDNSRequest(inputBytes []byte, length int, clientAddr *net.UDPAddr) {
+func ResolveDNSRequest(inputBytes []byte, length int, conn *net.UDPConn, clientAddr *net.UDPAddr) {
 	query, err := dnsparser.ParseDnsQuery(inputBytes, length)
 	if err != nil {
 		fmt.Print(err)
@@ -57,7 +57,10 @@ func ResolveDNSRequest(inputBytes []byte, length int, clientAddr *net.UDPAddr) {
 		fmt.Print(err)
 		return
 	}
-
+	_, err = conn.WriteToUDP(rawMessage, clientAddr)
+	if err != nil {
+		fmt.Printf("can't send message to client\n")
+	}
 	/* send the response back to the client/resolver */
 	fmt.Println(query)
 	fmt.Println(rrResults)
