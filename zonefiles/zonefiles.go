@@ -229,9 +229,10 @@ type Zone struct {
 }
 
 func (z *Zone) Put(key string, data interface{}) error {
-	return nil
+	return z.trie.Put(key, data)
 }
 
+// TODO: implement update and delete methods
 func (z *Zone) Update(key string, data interface{}) error {
 	return nil
 }
@@ -241,7 +242,11 @@ func (z *Zone) Delete(key string) (interface{}, error) {
 }
 
 func (z *Zone) Search(key string) (interface{}, error) {
-	return nil, nil
+	if !strings.HasSuffix(key, z.Origin) {
+		return nil, fmt.Errorf("key doesn't match with the zone origin prefix")
+	}
+	k := strings.TrimSuffix(key, "."+z.Origin)
+	return z.trie.Search(k)
 }
 
 func (z *Zone) IsEmpty() bool {
